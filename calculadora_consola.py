@@ -1,457 +1,429 @@
 import random
-import tkinter as tk
-from tkinter import simpledialog, messagebox, filedialog
 
-class MatrixCalculatorGUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("🕹️ Calculadora de Matrices - Modo Gamer 🕹️")
-        self.root.state('zoomed')  # Maximizada
+class MatrixCalculator:
+    """
+    Calculadora de matrices en consola.
+    Permite:
+    - Crear, modificar, guardar y cargar matrices.
+    - Realizar operaciones entre matrices: suma, resta, multiplicación, Hadamard, división elemento a elemento.
+    - Realizar operaciones sobre una matriz: transpuesta, determinante, adjunta, inversa, multiplicación por escalar.
+    - Guardar un historial de operaciones realizadas.
+    - Eliminar matrices existentes.
+    """
+
+    def __init__(self):
+        """Inicializa la calculadora con un diccionario de matrices y un historial vacío."""
         self.matrices = {}
         self.historial = []
-        self.current_matrix_name = None
 
-        # ================= FRAMES =================
-        self.frame_lateral = tk.Frame(root, width=250, bg="#1b1b2f")
-        self.frame_lateral.pack(side="left", fill="y")
-
-        # Scroll en el panel lateral
-        self.scroll_lateral = tk.Scrollbar(self.frame_lateral)
-        self.scroll_lateral.pack(side="right", fill="y")
-
-        self.canvas_lateral = tk.Canvas(self.frame_lateral, bg="#1b1b2f",
-                                        yscrollcommand=self.scroll_lateral.set)
-        self.canvas_lateral.pack(side="left", fill="both", expand=True)
-        self.scroll_lateral.config(command=self.canvas_lateral.yview)
-
-        self.lateral_frame_interno = tk.Frame(self.canvas_lateral, bg="#1b1b2f")
-        self.canvas_lateral.create_window((0, 0), window=self.lateral_frame_interno, anchor="nw")
-
-        self.lateral_frame_interno.bind(
-            "<Configure>", lambda e: self.canvas_lateral.configure(scrollregion=self.canvas_lateral.bbox("all"))
-        )
-
-        # Frame principal
-        self.frame_principal = tk.Frame(root, bg="#0f3460")
-        self.frame_principal.pack(side="right", fill="both", expand=True)
-
-        tk.Label(self.frame_principal, text="🕹️ Calculadora de Matrices 🕹️",
-                 font=("Arial", 24, "bold"), fg="#e94560", bg="#0f3460").pack(pady=20)
-
-        # Canvas y scroll para matrices
-        self.canvas = tk.Canvas(self.frame_principal, bg="#0f3460")
-        self.scroll_y = tk.Scrollbar(self.frame_principal, orient="vertical", command=self.canvas.yview)
-        self.scroll_x = tk.Scrollbar(self.frame_principal, orient="horizontal", command=self.canvas.xview)
-        self.content_frame = tk.Frame(self.canvas, bg="#0f3460")
-
-        self.content_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        )
-        self.canvas.create_window((0,0), window=self.content_frame, anchor="nw")
-        self.canvas.configure(yscrollcommand=self.scroll_y.set, xscrollcommand=self.scroll_x.set)
-
-        self.canvas.pack(side="top", fill="both", expand=True)
-        self.scroll_y.pack(side="right", fill="y")
-        self.scroll_x.pack(side="bottom", fill="x")
-
-        self.create_buttons()
-        self.actualizar_lista_matrices()
-
-    # ================= BOTONES =================
-    def create_buttons(self):
-        botones = [
-            ("Crear matriz", self.crear_matriz),
-            ("Listar matrices", self.actualizar_lista_matrices),
-            ("Modificar matriz seleccionada", self.modificar_matriz_desde_pantalla),
-            ("Eliminar matriz", self.eliminar_matriz),
-            ("Guardar matriz", self.guardar_matriz),
-            ("Cargar matriz", self.cargar_matriz),
-            ("Historial", self.mostrar_historial),
-            ("Exportar historial", self.exportar_historial),
-            ("Suma", lambda: self.op_binaria("suma")),
-            ("Resta", lambda: self.op_binaria("resta")),
-            ("Multiplicación", lambda: self.op_binaria("producto_matriz")),
-            ("Hadamard", lambda: self.op_binaria("producto_hadamard")),
-            ("División", lambda: self.op_binaria("division_elemento")),
-            ("Transpuesta", self.op_transpuesta),
-            ("Determinante", self.op_determinante),
-            ("Adjunta", self.op_adjunta),
-            ("Inversa", self.op_inversa),
-            ("Escalar", self.op_escalar),
-            ("Salir", self.root.quit)
-        ]
-        for text, cmd in botones:
-            b = tk.Button(self.lateral_frame_interno, text=text, width=25, height=2,
-                          bg="#162447", fg="#e94560", font=("Arial", 10, "bold"), command=cmd)
-            b.pack(pady=4)
-
-    # ================= LISTA DE MATRICES =================
-    def actualizar_lista_matrices(self):
-        for widget in self.content_frame.winfo_children():
-            widget.destroy()
-        tk.Label(self.content_frame, text="Matrices Disponibles:",
-                 font=("Arial", 16, "bold"), fg="#ffd369", bg="#0f3460").pack(pady=10)
-
-        for nombre, matriz in self.matrices.items():
-            frame = tk.Frame(self.content_frame, bg="#1b1b2f", bd=2, relief="ridge")
-            frame.pack(pady=5, padx=10, fill="x")
-
-            tk.Label(frame, text=nombre, font=("Arial", 14, "bold"),
-                     fg="#ffd369", bg="#1b1b2f").pack(side="top", anchor="w")
-
-            table_frame = tk.Frame(frame, bg="#0f3460")
-            table_frame.pack(pady=5)
-            rows, cols = len(matriz), len(matriz[0])
-            for i in range(rows):
-                for j in range(cols):
-                    val = tk.Text(table_frame, width=6, height=1, bg="#0f3460", fg="#ffd369")
-                    val.insert("1.0", f"{matriz[i][j]:.2f}")
-                    val.configure(state="disabled")  # 🔒 bloqueado
-                    val.grid(row=i, column=j, padx=1, pady=1)
-
-            tk.Button(frame, text="Seleccionar", bg="#e94560", fg="white",
-                      command=lambda n=nombre: self.seleccionar_matriz_actual(n)).pack(pady=5)
-
-    def seleccionar_matriz_actual(self, nombre):
-        self.current_matrix_name = nombre
-        messagebox.showinfo("✅ Seleccionada", f"Matriz '{nombre}' seleccionada.", parent=self.root)
-
-    # ================= CREAR MATRIZ =================
-    def crear_matriz(self):
-        nombre = self.pedir_nombre_matriz("Ingrese el nombre de la matriz:")
-        if not nombre: return
+    # ======================= CREACIÓN Y LISTADO =======================
+    def crear_matriz(self, nombre):
         try:
-            filas = simpledialog.askinteger("Filas", "Número de filas:", parent=self.root)
-            columnas = simpledialog.askinteger("Columnas", "Número de columnas:", parent=self.root)
-            if filas <=0 or columnas <=0:
-                messagebox.showerror("⚠️ Error", "Filas y columnas deben ser mayores que 0.", parent=self.root)
+            filas = int(input("Número de filas: "))
+            columnas = int(input("Número de columnas: "))
+
+            if filas <= 0 or columnas <= 0:
+                print("⚠️ Filas y columnas deben ser mayores que 0.")
                 return
-            if filas>50 or columnas>50:
-                messagebox.showwarning("⚠️ Atención", "Matriz muy grande. Máximo recomendado: 50x50", parent=self.root)
-        except:
-            messagebox.showerror("⚠️ Error", "Valores inválidos.", parent=self.root)
-            return
+            if filas > 50 or columnas > 50:
+                print(f"⚠️ La matriz es demasiado grande ({filas}x{columnas}). Máximo recomendado: 50x50")
+                return
 
-        tipo = simpledialog.askstring("Tipo", "Manual (M) o Aleatoria (A)?", parent=self.root)
-        if not tipo:
-            return
-        tipo = tipo.strip().upper()
-        matriz = []
+            tipo = input("¿Desea llenarla manual (M) o aleatoria (A)? ").strip().upper()
+            matriz = []
 
-        if tipo == "M":
-            for i in range(filas):
-                fila = []
-                for j in range(columnas):
-                    while True:
-                        try:
-                            val = simpledialog.askfloat("Elemento", f"Elemento ({i},{j}):", parent=self.root)
-                            if val != val or val in (float("inf"), float("-inf")):
-                                messagebox.showerror("⚠️ Error", "Valor inválido (NaN o Inf)", parent=self.root)
-                                continue
-                            fila.append(val)
-                            break
-                        except:
+            if tipo == "M":
+                for i in range(filas):
+                    fila = []
+                    for j in range(columnas):
+                        while True:
+                            try:
+                                val = float(input(f"Elemento ({i},{j}): "))
+                                if val != val or val in (float("inf"), float("-inf")):
+                                    print("⚠️ Valor inválido (NaN o Inf). Intente de nuevo.")
+                                    continue
+                                fila.append(val)
+                                break
+                            except ValueError:
+                                print("⚠️ Entrada inválida. Ingrese un número.")
+                    matriz.append(fila)
+
+            elif tipo == "A":
+                while True:
+                    try:
+                        minimo = int(input("Valor mínimo: "))
+                        maximo = int(input("Valor máximo: "))
+                        if minimo > maximo:
+                            print("⚠️ El mínimo no puede ser mayor que el máximo.")
                             continue
-                matriz.append(fila)
-        elif tipo == "A":
+                        break
+                    except ValueError:
+                        print("⚠️ Entrada inválida. Deben ser números enteros.")
+                matriz = [[random.randint(minimo, maximo) for _ in range(columnas)] for _ in range(filas)]
+            else:
+                print("⚠️ Opción inválida.")
+                return
+
+            self.matrices[nombre] = matriz
+            print(f"✅ Matriz '{nombre}' creada con éxito.")
+
+        except ValueError:
+            print("⚠️ Entrada inválida. Debe ser un número entero.")
+
+    def listar_matrices(self):
+        """Muestra todas las matrices almacenadas de forma compacta (columnas si hay 3 o más)."""
+        if not self.matrices:
+            print("⚠️ No hay matrices creadas.")
+            return
+
+        nombres = list(self.matrices.keys())
+        num_matrices = len(nombres)
+
+        if num_matrices < 3:
+            for nombre in nombres:
+                print(f"\n🔹 Matriz {nombre}:")
+                for fila in self.matrices[nombre]:
+                    print(" ".join(f"{x:8.2f}" for x in fila))
+        else:
+            # Mostrar matrices en columnas tipo 3 en paralelo
+            col_count = 3
+            rows = max(len(self.matrices[nombres[i]]) for i in range(num_matrices))
+            for r in range(rows):
+                line = ""
+                for c in range(col_count):
+                    idx = r + c*rows
+                    if idx < num_matrices:
+                        matriz = self.matrices[nombres[idx]]
+                        if r < len(matriz):
+                            line += " ".join(f"{x:6.2f}" for x in matriz[r]) + "    "
+                        else:
+                            line += " " * (6*len(matriz[0])+4)
+                print(line)
+
+    def modificar_elemento(self):
+        if not self.matrices:
+            print("⚠️ No hay matrices para modificar.")
+            return
+
+        nombre = input("Nombre de la matriz a modificar: ").strip()
+        if nombre not in self.matrices:
+            print("⚠️ No existe esa matriz.")
+            return
+
+        matriz = self.matrices[nombre]
+        try:
+            i = int(input("Fila: "))
+            j = int(input("Columna: "))
+            if i < 0 or j < 0 or i >= len(matriz) or j >= len(matriz[0]):
+                print("⚠️ Posición fuera de rango.")
+                return
+
             while True:
                 try:
-                    minimo = simpledialog.askinteger("Mínimo", "Valor mínimo:", parent=self.root)
-                    maximo = simpledialog.askinteger("Máximo", "Valor máximo:", parent=self.root)
-                    if minimo>maximo:
-                        messagebox.showerror("⚠️ Error", "Mínimo no puede ser mayor que máximo.", parent=self.root)
+                    val = float(input("Nuevo valor: "))
+                    if val != val or val in (float("inf"), float("-inf")):
+                        print("⚠️ Valor inválido (NaN o Inf). Intente de nuevo.")
                         continue
                     break
-                except:
-                    continue
-            matriz = [[random.randint(minimo, maximo) for _ in range(columnas)] for _ in range(filas)]
-        else:
-            messagebox.showerror("⚠️ Error", "Opción inválida", parent=self.root)
-            return
+                except ValueError:
+                    print("⚠️ Entrada inválida. Ingrese un número.")
 
-        self.matrices[nombre] = matriz
-        self.historial.append(f"Matriz '{nombre}' creada")
-        self.current_matrix_name = nombre
-        messagebox.showinfo("✅ Éxito", f"Matriz '{nombre}' creada.", parent=self.root)
-        self.actualizar_lista_matrices()
+            matriz[i][j] = val
+            print("✅ Valor actualizado.")
 
-    # ================= MODIFICAR MATRIZ =================
-    def modificar_matriz_desde_pantalla(self):
-        if not self.current_matrix_name:
-            messagebox.showwarning("⚠️ Atención", "Debes seleccionar una matriz primero.", parent=self.root)
-            return
+        except ValueError:
+            print("⚠️ Entrada inválida. Debe ser un número entero.")
 
-        matriz = self.matrices[self.current_matrix_name]
-        filas, columnas = len(matriz), len(matriz[0])
-
-        ventana = tk.Toplevel(self.root)
-        ventana.title(f"Modificar matriz '{self.current_matrix_name}'")
-
-        entries = []
-        for i in range(filas):
-            fila_entries = []
-            for j in range(columnas):
-                e = tk.Entry(ventana, width=6)
-                e.grid(row=i, column=j, padx=2, pady=2)
-                e.insert(0, str(matriz[i][j]))
-                fila_entries.append(e)
-            entries.append(fila_entries)
-
-        def guardar_cambios():
-            try:
-                nueva = [[float(entries[i][j].get()) for j in range(columnas)] for i in range(filas)]
-                self.matrices[self.current_matrix_name] = nueva
-                self.historial.append(f"Matriz '{self.current_matrix_name}' modificada")
-                messagebox.showinfo("✅ Guardado", f"Matriz '{self.current_matrix_name}' modificada.", parent=ventana)
-                ventana.destroy()
-                self.actualizar_lista_matrices()
-            except:
-                messagebox.showerror("⚠️ Error", "Valores inválidos.", parent=ventana)
-
-        tk.Button(ventana, text="Guardar cambios", command=guardar_cambios,
-                  bg="#162447", fg="white").grid(row=filas, column=0, columnspan=columnas, pady=10)
-
-    # ================= ELIMINAR MATRIZ =================
+    # ======================= ELIMINAR =======================
     def eliminar_matriz(self):
+        """Elimina una matriz existente por nombre."""
         if not self.matrices:
-            messagebox.showwarning("⚠️ Atención", "No hay matrices para eliminar.", parent=self.root)
+            print("⚠️ No hay matrices para eliminar.")
             return
-        nombre = simpledialog.askstring("Eliminar", "Nombre de la matriz a eliminar:", parent=self.root)
-        if not nombre or nombre not in self.matrices:
-            messagebox.showerror("⚠️ Error", "Matriz no encontrada.", parent=self.root)
-            return
-        del self.matrices[nombre]
-        if self.current_matrix_name == nombre:
-            self.current_matrix_name = None
-        self.historial.append(f"Matriz '{nombre}' eliminada")
-        messagebox.showinfo("✅ Eliminada", f"Matriz '{nombre}' eliminada.", parent=self.root)
-        self.actualizar_lista_matrices()
+        nombre = input("Nombre de la matriz a eliminar: ").strip()
+        if nombre in self.matrices:
+            del self.matrices[nombre]
+            self.historial.append(f"Matriz eliminada → {nombre}")
+            print(f"✅ Matriz '{nombre}' eliminada.")
+        else:
+            print("⚠️ No existe esa matriz.")
 
-    # ================= FUNCIONES AUXILIARES =================
-    def pedir_nombre_matriz(self, prompt="Nombre de la matriz"):
-        nombre = simpledialog.askstring("Nombre", prompt, parent=self.root)
-        if not nombre:
-            return None
-        while nombre in self.matrices:
-            nombre = simpledialog.askstring("Nombre", f"'{nombre}' ya existe. Ingrese otro:", parent=self.root)
-            if not nombre:
-                return None
-        return nombre
-
-    def seleccionar_matriz(self, prompt="Nombre de la matriz"):
+    # ======================= GUARDAR / CARGAR =======================
+    def guardar_matriz(self):
         if not self.matrices:
-            messagebox.showwarning("⚠️ Atención", "No hay matrices disponibles.", parent=self.root)
-            return None
-        nombre = simpledialog.askstring("Seleccionar matriz", prompt, parent=self.root)
-        if not nombre or nombre not in self.matrices:
-            messagebox.showerror("⚠️ Error", "No existe esa matriz.", parent=self.root)
-            return None
-        return self.matrices[nombre], nombre
+            print("⚠️ No hay matrices para guardar.")
+            return
 
-    # ================= OPERACIONES =================
-    # (Mantengo tus operaciones exactamente igual)
+        nombre = input("Nombre de la matriz a guardar: ").strip()
+        if nombre not in self.matrices:
+            print("⚠️ No existe esa matriz.")
+            return
+
+        archivo = input("Nombre del archivo (.txt o .csv): ").strip()
+        try:
+            with open(archivo, "w") as f:
+                for fila in self.matrices[nombre]:
+                    f.write(",".join(map(str, fila)) + "\n")
+            print(f"✅ Matriz '{nombre}' guardada en {archivo}.")
+        except Exception as e:
+            print(f"⚠️ Error al guardar: {e}")
+
+    def cargar_matriz(self):
+        archivo = input("Nombre del archivo a cargar: ").strip()
+        try:
+            with open(archivo, "r") as f:
+                lineas = f.readlines()
+
+            matriz = []
+            for linea in lineas:
+                try:
+                    matriz.append(list(map(float, linea.strip().split(","))))
+                except ValueError:
+                    print("⚠️ El archivo contiene datos inválidos.")
+                    return
+
+            if not matriz:
+                print("⚠️ El archivo está vacío o mal formateado.")
+                return
+
+            nombre = input("Nombre para la matriz cargada: ").strip()
+            self.matrices[nombre] = matriz
+            print(f"✅ Matriz '{nombre}' cargada desde {archivo}.")
+
+        except FileNotFoundError:
+            print("⚠️ Archivo no encontrado.")
+        except Exception as e:
+            print(f"⚠️ Error al cargar: {e}")
+
+    # ======================= OPERACIONES BINARIAS =======================
     def op_binaria(self, tipo):
         if len(self.matrices) < 2:
-            messagebox.showwarning("⚠️ Atención","Se necesitan al menos 2 matrices.", parent=self.root)
+            print("⚠️ Se necesitan al menos 2 matrices.")
             return
-        selA = self.seleccionar_matriz("Primera matriz")
-        selB = self.seleccionar_matriz("Segunda matriz")
-        if not selA or not selB:
-            return
-        A,_ = selA
-        B,_ = selB
-        try:
-            if tipo=="suma":
-                if len(A)!=len(B) or len(A[0])!=len(B[0]):
-                    messagebox.showerror("⚠️ Error","Dimensiones no coinciden para suma", parent=self.root)
-                    return
-                R=[[A[i][j]+B[i][j] for j in range(len(A[0]))] for i in range(len(A))]
-            elif tipo=="resta":
-                if len(A)!=len(B) or len(A[0])!=len(B[0]):
-                    messagebox.showerror("⚠️ Error","Dimensiones no coinciden para resta", parent=self.root)
-                    return
-                R=[[A[i][j]-B[i][j] for j in range(len(A[0]))] for i in range(len(A))]
-            elif tipo=="producto_matriz":
-                if len(A[0])!=len(B):
-                    messagebox.showerror("⚠️ Error","Columnas A != Filas B", parent=self.root)
-                    return
-                R=[[sum(A[i][k]*B[k][j] for k in range(len(B))) for j in range(len(B[0]))] for i in range(len(A))]
-            elif tipo=="producto_hadamard":
-                if len(A)!=len(B) or len(A[0])!=len(B[0]):
-                    messagebox.showerror("⚠️ Error","Dimensiones no coinciden para Hadamard", parent=self.root)
-                    return
-                R=[[A[i][j]*B[i][j] for j in range(len(A[0]))] for i in range(len(A))]
-            elif tipo=="division_elemento":
-                if len(A)!=len(B) or len(A[0])!=len(B[0]):
-                    messagebox.showerror("⚠️ Error","Dimensiones no coinciden para división", parent=self.root)
-                    return
-                R=[[A[i][j]/B[i][j] if B[i][j]!=0 else 0 for j in range(len(A[0]))] for i in range(len(A))]
-            else:
-                messagebox.showerror("⚠️ Error","Operación desconocida", parent=self.root)
-                return
-            nombre = self.pedir_nombre_matriz("Nombre de la matriz resultado")
-            if not nombre: return
-            self.matrices[nombre]=R
-            self.historial.append(f"Resultado de {tipo.upper()} → {nombre}")
-            messagebox.showinfo("✅ Éxito", f"Operación {tipo} guardada como '{nombre}'", parent=self.root)
-            self.actualizar_lista_matrices()
-        except Exception as e:
-            messagebox.showerror("⚠️ Error", f"Ocurrió un error: {e}", parent=self.root)
 
-    # ================= FUNCIONES DE MATRICES =================
+        A = self.seleccionar_matriz("primera")
+        B = self.seleccionar_matriz("segunda")
+        if not A or not B:
+            return
+
+        try:
+            if tipo == "suma":
+                if len(A) != len(B) or len(A[0]) != len(B[0]):
+                    print("⚠️ Las dimensiones no coinciden para la suma.")
+                    return
+                R = [[A[i][j] + B[i][j] for j in range(len(A[0]))] for i in range(len(A))]
+
+            elif tipo == "resta":
+                if len(A) != len(B) or len(A[0]) != len(B[0]):
+                    print("⚠️ Las dimensiones no coinciden para la resta.")
+                    return
+                R = [[A[i][j] - B[i][j] for j in range(len(A[0]))] for i in range(len(A))]
+
+            elif tipo == "producto_matriz":
+                if len(A[0]) != len(B):
+                    print("⚠️ Columnas de A ≠ Filas de B.")
+                    return
+                R = [[sum(A[i][k] * B[k][j] for k in range(len(B))) for j in range(len(B[0]))] for i in range(len(A))]
+
+            elif tipo == "producto_hadamard":
+                if len(A) != len(B) or len(A[0]) != len(B[0]):
+                    print("⚠️ Las dimensiones no coinciden para Hadamard.")
+                    return
+                R = [[A[i][j] * B[i][j] for j in range(len(A[0]))] for i in range(len(A))]
+
+            elif tipo == "division_elemento":
+                if len(A) != len(B) or len(A[0]) != len(B[0]):
+                    print("⚠️ Las dimensiones no coinciden para división.")
+                    return
+                R = [[A[i][j] / B[i][j] if B[i][j] != 0 else float("inf") for j in range(len(A[0]))] for i in range(len(A))]
+
+            else:
+                print("⚠️ Operación desconocida.")
+                return
+
+            nombre = input("Nombre de la matriz resultado: ").strip()
+            self.matrices[nombre] = R
+            self.historial.append(f"Resultado de {tipo.upper()} → {nombre}")
+            print(f"✅ Operación {tipo} guardada como '{nombre}'.")
+
+        except Exception as e:
+            print(f"⚠️ Error en operación: {e}")
+
+    # ======================= OPERACIONES SOBRE UNA MATRIZ =======================
     def op_transpuesta(self):
-        sel = self.seleccionar_matriz()
-        if not sel: return
-        A, _ = sel
-        R = [list(f) for f in zip(*A)]
-        nombre = self.pedir_nombre_matriz("Nombre de la transpuesta")
-        if not nombre: return
-        self.matrices[nombre]=R
+        A = self.seleccionar_matriz()
+        if not A:
+            return
+        R = [list(fila) for fila in zip(*A)]
+        nombre = input("Nombre de la transpuesta: ").strip()
+        self.matrices[nombre] = R
         self.historial.append(f"Transpuesta → {nombre}")
-        messagebox.showinfo("✅ Éxito", f"Transpuesta guardada como '{nombre}'", parent=self.root)
-        self.actualizar_lista_matrices()
+        print(f"✅ Transpuesta guardada como '{nombre}'.")
 
     def op_determinante(self):
-        sel = self.seleccionar_matriz()
-        if not sel: return
-        A, nombre_matriz = sel
-        if len(A)!=len(A[0]):
-            messagebox.showerror("⚠️ Error", "Solo se permite determinante en matrices cuadradas.", parent=self.root)
+        A = self.seleccionar_matriz()
+        if not A:
             return
-        det = self.determinante(A)
-        self.historial.append(f"Determinante de '{nombre_matriz}' calculado")
-        messagebox.showinfo("📌 Determinante", f"Determinante de '{nombre_matriz}' = {det}", parent=self.root)
+        if len(A) != len(A[0]):
+            print("⚠️ Solo se permite determinante en matrices cuadradas.")
+            return
+        print("📌 Cálculo paso a paso del determinante:")
+        det = self.determinante(A, paso=True)
+        print(f"Determinante = {det}")
 
-    def determinante(self, M):
-        if len(M) == 1: return M[0][0]
-        if len(M) == 2: return M[0][0]*M[1][1]-M[0][1]*M[1][0]
-        det=0
+    def determinante(self, M, paso=False, nivel=0):
+        if len(M) == 1:
+            return M[0][0]
+        if len(M) == 2:
+            return M[0][0]*M[1][1] - M[0][1]*M[1][0]
+        det = 0
         for c in range(len(M[0])):
-            minor=[fila[:c]+fila[c+1:] for fila in M[1:]]
-            det+=((-1)**c)*M[0][c]*self.determinante(minor)
+            minor = [fila[:c]+fila[c+1:] for fila in M[1:]]
+            cofactor = ((-1)**c) * M[0][c] * self.determinante(minor, paso, nivel+1)
+            if paso:
+                print(" "*nivel + f"Expandir con elemento {M[0][c]} en columna {c}: {cofactor}")
+            det += cofactor
         return det
 
     def op_adjunta(self):
-        sel = self.seleccionar_matriz()
-        if not sel: return
-        A,_=sel
-        if len(A)!=len(A[0]):
-            messagebox.showerror("⚠️ Error","Solo cuadradas", parent=self.root)
+        A = self.seleccionar_matriz()
+        if not A or len(A) != len(A[0]):
+            print("⚠️ Solo se permite adjunta en matrices cuadradas.")
             return
-        adj=[]
-        n=len(A)
-        for i in range(n):
-            fila=[]
-            for j in range(n):
-                minor=[row[:j]+row[j+1:] for k,row in enumerate(A) if k!=i]
-                fila.append(((-1)**(i+j))*self.determinante(minor))
+        adj = []
+        for i in range(len(A)):
+            fila = []
+            for j in range(len(A)):
+                minor = [row[:j] + row[j+1:] for k, row in enumerate(A) if k != i]
+                fila.append(((-1) ** (i+j)) * self.determinante(minor))
             adj.append(fila)
-        adj_T=[list(f) for f in zip(*adj)]
-        nombre=self.pedir_nombre_matriz("Nombre adjunta")
-        if not nombre: return
-        self.matrices[nombre]=adj_T
+        R = [list(fila) for fila in zip(*adj)]
+        nombre = input("Nombre de la adjunta: ").strip()
+        self.matrices[nombre] = R
         self.historial.append(f"Adjunta → {nombre}")
-        messagebox.showinfo("✅ Éxito", f"Adjunta guardada como '{nombre}'", parent=self.root)
-        self.actualizar_lista_matrices()
+        print(f"✅ Adjunta guardada como '{nombre}'.")
 
     def op_inversa(self):
-        sel=self.seleccionar_matriz()
-        if not sel: return
-        A,_=sel
-        if len(A)!=len(A[0]):
-            messagebox.showerror("⚠️ Error","Solo cuadradas", parent=self.root)
+        A = self.seleccionar_matriz()
+        if not A or len(A) != len(A[0]):
+            print("⚠️ Solo se permite inversa en matrices cuadradas.")
             return
-        det=self.determinante(A)
-        if det==0:
-            messagebox.showerror("⚠️ Error","Matriz no tiene inversa", parent=self.root)
+        det = self.determinante(A)
+        if det == 0:
+            print("⚠️ La matriz no tiene inversa.")
             return
-        n=len(A)
-        adj=[]
-        for i in range(n):
-            fila=[]
-            for j in range(n):
-                minor=[row[:j]+row[j+1:] for k,row in enumerate(A) if k!=i]
-                fila.append(((-1)**(i+j))*self.determinante(minor))
+        adj = []
+        for i in range(len(A)):
+            fila = []
+            for j in range(len(A)):
+                minor = [row[:j] + row[j+1:] for k, row in enumerate(A) if k != i]
+                fila.append(((-1) ** (i+j)) * self.determinante(minor))
             adj.append(fila)
-        adj_T=[list(f) for f in zip(*adj)]
-        R=[[adj_T[i][j]/det for j in range(n)] for i in range(n)]
-        nombre=self.pedir_nombre_matriz("Nombre inversa")
-        if not nombre: return
-        self.matrices[nombre]=R
+        adj_T = [list(fila) for fila in zip(*adj)]
+        try:
+            R = [[adj_T[i][j]/det for j in range(len(A))] for i in range(len(A))]
+        except ZeroDivisionError:
+            print("⚠️ Error: división por cero en la inversa.")
+            return
+        nombre = input("Nombre de la inversa: ").strip()
+        self.matrices[nombre] = R
         self.historial.append(f"Inversa → {nombre}")
-        messagebox.showinfo("✅ Éxito", f"Inversa guardada como '{nombre}'", parent=self.root)
-        self.actualizar_lista_matrices()
+        print(f"✅ Inversa guardada como '{nombre}'.")
 
     def op_escalar(self):
-        sel=self.seleccionar_matriz()
-        if not sel: return
-        A,_=sel
-        try:
-            esc=float(simpledialog.askstring("Escalar","Valor escalar", parent=self.root))
-        except:
-            messagebox.showerror("⚠️ Error","Valor inválido", parent=self.root)
+        A = self.seleccionar_matriz()
+        if not A:
             return
-        R=[[A[i][j]*esc for j in range(len(A[0]))] for i in range(len(A))]
-        nombre=self.pedir_nombre_matriz("Nombre resultado")
-        if not nombre: return
-        self.matrices[nombre]=R
-        self.historial.append(f"Escalar({esc}) → {nombre}")
-        messagebox.showinfo("✅ Éxito", f"Resultado guardado como '{nombre}'", parent=self.root)
-        self.actualizar_lista_matrices()
+        while True:
+            try:
+                esc = float(input("Ingrese el escalar: "))
+                if esc != esc or esc in (float("inf"), float("-inf")):
+                    print("⚠️ Escalar inválido.")
+                    continue
+                break
+            except ValueError:
+                print("⚠️ Entrada inválida. Ingrese un número.")
+        R = [[A[i][j]*esc for j in range(len(A[0]))] for i in range(len(A))]
+        nombre = input("Nombre de la matriz resultado: ").strip()
+        self.matrices[nombre] = R
+        self.historial.append(f"Escalar ({esc}) → {nombre}")
+        print(f"✅ Escalar aplicado, guardado como '{nombre}'.")
 
-    # ================= GUARDAR / CARGAR =================
-    def guardar_matriz(self):
-        sel=self.seleccionar_matriz()
-        if not sel: return
-        A,nombre=sel
-        ruta=filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files","*.txt")])
-        if not ruta: return
-        with open(ruta,"w", encoding="utf-8") as f:
-            for fila in A:
-                f.write(",".join(str(x) for x in fila)+"\n")
-        messagebox.showinfo("✅ Guardada", f"Matriz '{nombre}' guardada en {ruta}", parent=self.root)
+    # ======================= AUXILIARES =======================
+    def seleccionar_matriz(self, orden=""):
+        if not self.matrices:
+            print("⚠️ No hay matrices.")
+            return None
+        nombre = input(f"Nombre de la {orden} matriz: ").strip()
+        if nombre not in self.matrices:
+            print("⚠️ No existe esa matriz.")
+            return None
+        return self.matrices[nombre]
 
-    def cargar_matriz(self):
-        ruta=filedialog.askopenfilename(filetypes=[("Text files","*.txt")])
-        if not ruta: return
-        with open(ruta,"r", encoding="utf-8") as f:
-            lineas=f.readlines()
-        matriz=[list(map(float,l.strip().split(","))) for l in lineas]
-        nombre=self.pedir_nombre_matriz("Nombre matriz cargada")
-        if not nombre: return
-        self.matrices[nombre]=matriz
-        self.historial.append(f"Matriz '{nombre}' cargada desde archivo")
-        self.actualizar_lista_matrices()
-
-    # ================= HISTORIAL =================
     def mostrar_historial(self):
         if not self.historial:
-            messagebox.showinfo("Historial","No hay operaciones aún.", parent=self.root)
+            print("⚠️ No hay operaciones registradas.")
             return
-        ventana=tk.Toplevel(self.root)
-        ventana.title("Historial")
-        texto=tk.Text(ventana,width=50,height=20)
-        texto.pack()
-        texto.insert("1.0","\n".join(self.historial))
+        print("\n📜 Historial de operaciones:")
+        for op in self.historial:
+            print(" -", op)
 
     def exportar_historial(self):
         if not self.historial:
-            messagebox.showwarning("⚠️ Atención","No hay historial", parent=self.root)
+            print("⚠️ No hay operaciones para exportar.")
             return
-        ruta=filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files","*.txt")])
-        if not ruta: return
-        with open(ruta,"w", encoding="utf-8") as f:
-            for h in self.historial:
-                f.write(h+"\n")
-        messagebox.showinfo("✅ Exportado", f"Historial exportado a {ruta}", parent=self.root)
+        archivo = input("Nombre del archivo para exportar historial: ").strip()
+        try:
+            with open(archivo, "w") as f:
+                for op in self.historial:
+                    f.write(op + "\n")
+            print(f"✅ Historial exportado a {archivo}.")
+        except Exception as e:
+            print(f"⚠️ Error al exportar historial: {e}")
 
+    # ======================= MENÚ =======================
+    def menu(self):
+        opciones = {
+            "1": ("Crear matriz", lambda: self.crear_matriz(input("Nombre: ").strip())),
+            "2": ("Listar matrices", self.listar_matrices),
+            "3": ("Modificar elemento", self.modificar_elemento),
+            "4": ("Guardar matriz", self.guardar_matriz),
+            "5": ("Cargar matriz", self.cargar_matriz),
+            "6": ("Eliminar matriz", self.eliminar_matriz),
+            "7": ("Historial", self.mostrar_historial),
+            "8": ("Exportar historial", self.exportar_historial),
+            "9": ("Suma", lambda: self.op_binaria("suma")),
+            "10": ("Resta", lambda: self.op_binaria("resta")),
+            "11": ("Multiplicación", lambda: self.op_binaria("producto_matriz")),
+            "12": ("Hadamard", lambda: self.op_binaria("producto_hadamard")),
+            "13": ("División", lambda: self.op_binaria("division_elemento")),
+            "14": ("Transpuesta", self.op_transpuesta),
+            "15": ("Determinante", self.op_determinante),
+            "16": ("Adjunta", self.op_adjunta),
+            "17": ("Inversa", self.op_inversa),
+            "18": ("Escalar", self.op_escalar),
+            "0": ("Salir", None)
+        }
 
-if __name__=="__main__":
-    root=tk.Tk()
-    app=MatrixCalculatorGUI(root)
-    root.mainloop()
+        while True:
+            print("\n===== CALCULADORA DE MATRICES =====")
+            for k, (desc, _) in opciones.items():
+                print(f"{k}. {desc}")
+            op = input("Seleccione una opción: ").strip()
+            if op == "0":
+                print("👋 Adiós.")
+                break
+            elif op in opciones:
+                try:
+                    opciones[op][1]()
+                except Exception as e:
+                    print(f"⚠️ Error en la opción: {e}")
+            else:
+                print("⚠️ Opción inválida.")
 
-
+# ======================= MAIN =======================
+if __name__ == "__main__":
+    calc = MatrixCalculator()
+    calc.menu()
 
 
