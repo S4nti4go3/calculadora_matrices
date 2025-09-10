@@ -15,13 +15,30 @@ class MatrixCalculatorGUI:
         self.frame_lateral = tk.Frame(root, width=250, bg="#1b1b2f")
         self.frame_lateral.pack(side="left", fill="y")
 
+        # Scroll en el panel lateral
+        self.scroll_lateral = tk.Scrollbar(self.frame_lateral)
+        self.scroll_lateral.pack(side="right", fill="y")
+
+        self.canvas_lateral = tk.Canvas(self.frame_lateral, bg="#1b1b2f",
+                                        yscrollcommand=self.scroll_lateral.set)
+        self.canvas_lateral.pack(side="left", fill="both", expand=True)
+        self.scroll_lateral.config(command=self.canvas_lateral.yview)
+
+        self.lateral_frame_interno = tk.Frame(self.canvas_lateral, bg="#1b1b2f")
+        self.canvas_lateral.create_window((0, 0), window=self.lateral_frame_interno, anchor="nw")
+
+        self.lateral_frame_interno.bind(
+            "<Configure>", lambda e: self.canvas_lateral.configure(scrollregion=self.canvas_lateral.bbox("all"))
+        )
+
+        # Frame principal
         self.frame_principal = tk.Frame(root, bg="#0f3460")
         self.frame_principal.pack(side="right", fill="both", expand=True)
 
         tk.Label(self.frame_principal, text="🕹️ Calculadora de Matrices 🕹️",
                  font=("Arial", 24, "bold"), fg="#e94560", bg="#0f3460").pack(pady=20)
 
-        # Canvas y scroll
+        # Canvas y scroll para matrices
         self.canvas = tk.Canvas(self.frame_principal, bg="#0f3460")
         self.scroll_y = tk.Scrollbar(self.frame_principal, orient="vertical", command=self.canvas.yview)
         self.scroll_x = tk.Scrollbar(self.frame_principal, orient="horizontal", command=self.canvas.xview)
@@ -47,7 +64,7 @@ class MatrixCalculatorGUI:
             ("Crear matriz", self.crear_matriz),
             ("Listar matrices", self.actualizar_lista_matrices),
             ("Modificar matriz seleccionada", self.modificar_matriz_desde_pantalla),
-            ("Eliminar matriz", self.eliminar_matriz),  # ← BOTÓN NUEVO
+            ("Eliminar matriz", self.eliminar_matriz),
             ("Guardar matriz", self.guardar_matriz),
             ("Cargar matriz", self.cargar_matriz),
             ("Historial", self.mostrar_historial),
@@ -65,8 +82,8 @@ class MatrixCalculatorGUI:
             ("Salir", self.root.quit)
         ]
         for text, cmd in botones:
-            b = tk.Button(self.frame_lateral, text=text, width=25, height=2, bg="#162447", fg="#e94560",
-                          font=("Arial", 10, "bold"), command=cmd)
+            b = tk.Button(self.lateral_frame_interno, text=text, width=25, height=2,
+                          bg="#162447", fg="#e94560", font=("Arial", 10, "bold"), command=cmd)
             b.pack(pady=4)
 
     # ================= LISTA DE MATRICES =================
@@ -80,7 +97,8 @@ class MatrixCalculatorGUI:
             frame = tk.Frame(self.content_frame, bg="#1b1b2f", bd=2, relief="ridge")
             frame.pack(pady=5, padx=10, fill="x")
 
-            tk.Label(frame, text=nombre, font=("Arial", 14, "bold"), fg="#ffd369", bg="#1b1b2f").pack(side="top", anchor="w")
+            tk.Label(frame, text=nombre, font=("Arial", 14, "bold"),
+                     fg="#ffd369", bg="#1b1b2f").pack(side="top", anchor="w")
 
             table_frame = tk.Frame(frame, bg="#0f3460")
             table_frame.pack(pady=5)
@@ -89,7 +107,7 @@ class MatrixCalculatorGUI:
                 for j in range(cols):
                     val = tk.Text(table_frame, width=6, height=1, bg="#0f3460", fg="#ffd369")
                     val.insert("1.0", f"{matriz[i][j]:.2f}")
-                    val.configure(state="normal")
+                    val.configure(state="disabled")  # 🔒 bloqueado
                     val.grid(row=i, column=j, padx=1, pady=1)
 
             tk.Button(frame, text="Seleccionar", bg="#e94560", fg="white",
@@ -101,13 +119,8 @@ class MatrixCalculatorGUI:
 
     # ================= CREAR MATRIZ =================
     def crear_matriz(self):
-        nombre = simpledialog.askstring("Nombre", "Ingrese el nombre de la matriz:", parent=self.root)
-        if not nombre:
-            return
-        while nombre in self.matrices:
-            nombre = simpledialog.askstring("Nombre", f"'{nombre}' ya existe. Ingrese otro nombre:", parent=self.root)
-            if not nombre:
-                return
+        nombre = self.pedir_nombre_matriz("Ingrese el nombre de la matriz:")
+        if not nombre: return
         try:
             filas = simpledialog.askinteger("Filas", "Número de filas:", parent=self.root)
             columnas = simpledialog.askinteger("Columnas", "Número de columnas:", parent=self.root)
@@ -163,6 +176,42 @@ class MatrixCalculatorGUI:
         messagebox.showinfo("✅ Éxito", f"Matriz '{nombre}' creada.", parent=self.root)
         self.actualizar_lista_matrices()
 
+    # ================= MODIFICAR MATRIZ =================
+    def modificar_matriz_desde_pantalla(self):
+        if not self.current_matrix_name:
+            messagebox.showwarning("⚠️ Atención", "Debes seleccionar una matriz primero.", parent=self.root)
+            return
+
+        matriz = self.matrices[self.current_matrix_name]
+        filas, columnas = len(matriz), len(matriz[0])
+
+        ventana = tk.Toplevel(self.root)
+        ventana.title(f"Modificar matriz '{self.current_matrix_name}'")
+
+        entries = []
+        for i in range(filas):
+            fila_entries = []
+            for j in range(columnas):
+                e = tk.Entry(ventana, width=6)
+                e.grid(row=i, column=j, padx=2, pady=2)
+                e.insert(0, str(matriz[i][j]))
+                fila_entries.append(e)
+            entries.append(fila_entries)
+
+        def guardar_cambios():
+            try:
+                nueva = [[float(entries[i][j].get()) for j in range(columnas)] for i in range(filas)]
+                self.matrices[self.current_matrix_name] = nueva
+                self.historial.append(f"Matriz '{self.current_matrix_name}' modificada")
+                messagebox.showinfo("✅ Guardado", f"Matriz '{self.current_matrix_name}' modificada.", parent=ventana)
+                ventana.destroy()
+                self.actualizar_lista_matrices()
+            except:
+                messagebox.showerror("⚠️ Error", "Valores inválidos.", parent=ventana)
+
+        tk.Button(ventana, text="Guardar cambios", command=guardar_cambios,
+                  bg="#162447", fg="white").grid(row=filas, column=0, columnspan=columnas, pady=10)
+
     # ================= ELIMINAR MATRIZ =================
     def eliminar_matriz(self):
         if not self.matrices:
@@ -179,48 +228,17 @@ class MatrixCalculatorGUI:
         messagebox.showinfo("✅ Eliminada", f"Matriz '{nombre}' eliminada.", parent=self.root)
         self.actualizar_lista_matrices()
 
-    # ================= MODIFICAR MATRIZ DESDE PANTALLA =================
-    def modificar_matriz_desde_pantalla(self):
-        if not self.current_matrix_name:
-            messagebox.showwarning("⚠️ Atención", "Primero selecciona una matriz.", parent=self.root)
-            return
-        matriz = self.matrices[self.current_matrix_name]
-        for widget in self.content_frame.winfo_children():
-            widget.destroy()
-
-        tk.Label(self.content_frame, text=f"Modificando '{self.current_matrix_name}'",
-                 font=("Arial", 16, "bold"), fg="#ffd369", bg="#0f3460").pack(pady=10)
-        table_frame = tk.Frame(self.content_frame, bg="#0f3460")
-        table_frame.pack(pady=10)
-
-        rows, cols = len(matriz), len(matriz[0])
-        entries = []
-        for i in range(rows):
-            fila_entries = []
-            for j in range(cols):
-                e = tk.Entry(table_frame, width=6, justify="center", bg="#0f3460", fg="#ffd369")
-                e.insert(0, f"{matriz[i][j]:.2f}")
-                e.grid(row=i, column=j, padx=1, pady=1)
-                fila_entries.append(e)
-            entries.append(fila_entries)
-
-        def guardar_cambios():
-            try:
-                for i in range(rows):
-                    for j in range(cols):
-                        val = float(entries[i][j].get())
-                        matriz[i][j] = val
-                self.matrices[self.current_matrix_name] = matriz
-                self.historial.append(f"Matriz '{self.current_matrix_name}' modificada desde pantalla")
-                messagebox.showinfo("✅ Éxito", f"Matriz '{self.current_matrix_name}' actualizada.", parent=self.root)
-                self.actualizar_lista_matrices()
-            except:
-                messagebox.showerror("⚠️ Error", "Entrada inválida.", parent=self.root)
-
-        tk.Button(self.content_frame, text="Guardar Cambios", bg="#e94560", fg="white",
-                  font=("Arial", 12, "bold"), command=guardar_cambios).pack(pady=10)
-
     # ================= FUNCIONES AUXILIARES =================
+    def pedir_nombre_matriz(self, prompt="Nombre de la matriz"):
+        nombre = simpledialog.askstring("Nombre", prompt, parent=self.root)
+        if not nombre:
+            return None
+        while nombre in self.matrices:
+            nombre = simpledialog.askstring("Nombre", f"'{nombre}' ya existe. Ingrese otro:", parent=self.root)
+            if not nombre:
+                return None
+        return nombre
+
     def seleccionar_matriz(self, prompt="Nombre de la matriz"):
         if not self.matrices:
             messagebox.showwarning("⚠️ Atención", "No hay matrices disponibles.", parent=self.root)
@@ -232,6 +250,7 @@ class MatrixCalculatorGUI:
         return self.matrices[nombre], nombre
 
     # ================= OPERACIONES =================
+    # (Mantengo tus operaciones exactamente igual)
     def op_binaria(self, tipo):
         if len(self.matrices) < 2:
             messagebox.showwarning("⚠️ Atención","Se necesitan al menos 2 matrices.", parent=self.root)
@@ -267,13 +286,12 @@ class MatrixCalculatorGUI:
                 if len(A)!=len(B) or len(A[0])!=len(B[0]):
                     messagebox.showerror("⚠️ Error","Dimensiones no coinciden para división", parent=self.root)
                     return
-                R=[[A[i][j]/B[i][j] if B[i][j]!=0 else float("inf") for j in range(len(A[0]))] for i in range(len(A))]
+                R=[[A[i][j]/B[i][j] if B[i][j]!=0 else 0 for j in range(len(A[0]))] for i in range(len(A))]
             else:
                 messagebox.showerror("⚠️ Error","Operación desconocida", parent=self.root)
                 return
-            nombre = simpledialog.askstring("Nombre", "Nombre de la matriz resultado", parent=self.root)
-            if not nombre:
-                return
+            nombre = self.pedir_nombre_matriz("Nombre de la matriz resultado")
+            if not nombre: return
             self.matrices[nombre]=R
             self.historial.append(f"Resultado de {tipo.upper()} → {nombre}")
             messagebox.showinfo("✅ Éxito", f"Operación {tipo} guardada como '{nombre}'", parent=self.root)
@@ -287,7 +305,7 @@ class MatrixCalculatorGUI:
         if not sel: return
         A, _ = sel
         R = [list(f) for f in zip(*A)]
-        nombre = simpledialog.askstring("Nombre", "Nombre de la transpuesta", parent=self.root)
+        nombre = self.pedir_nombre_matriz("Nombre de la transpuesta")
         if not nombre: return
         self.matrices[nombre]=R
         self.historial.append(f"Transpuesta → {nombre}")
@@ -330,7 +348,7 @@ class MatrixCalculatorGUI:
                 fila.append(((-1)**(i+j))*self.determinante(minor))
             adj.append(fila)
         adj_T=[list(f) for f in zip(*adj)]
-        nombre=simpledialog.askstring("Nombre","Nombre adjunta", parent=self.root)
+        nombre=self.pedir_nombre_matriz("Nombre adjunta")
         if not nombre: return
         self.matrices[nombre]=adj_T
         self.historial.append(f"Adjunta → {nombre}")
@@ -358,7 +376,7 @@ class MatrixCalculatorGUI:
             adj.append(fila)
         adj_T=[list(f) for f in zip(*adj)]
         R=[[adj_T[i][j]/det for j in range(n)] for i in range(n)]
-        nombre=simpledialog.askstring("Nombre","Nombre inversa", parent=self.root)
+        nombre=self.pedir_nombre_matriz("Nombre inversa")
         if not nombre: return
         self.matrices[nombre]=R
         self.historial.append(f"Inversa → {nombre}")
@@ -375,7 +393,7 @@ class MatrixCalculatorGUI:
             messagebox.showerror("⚠️ Error","Valor inválido", parent=self.root)
             return
         R=[[A[i][j]*esc for j in range(len(A[0]))] for i in range(len(A))]
-        nombre=simpledialog.askstring("Nombre","Nombre resultado", parent=self.root)
+        nombre=self.pedir_nombre_matriz("Nombre resultado")
         if not nombre: return
         self.matrices[nombre]=R
         self.historial.append(f"Escalar({esc}) → {nombre}")
@@ -389,7 +407,7 @@ class MatrixCalculatorGUI:
         A,nombre=sel
         ruta=filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files","*.txt")])
         if not ruta: return
-        with open(ruta,"w") as f:
+        with open(ruta,"w", encoding="utf-8") as f:
             for fila in A:
                 f.write(",".join(str(x) for x in fila)+"\n")
         messagebox.showinfo("✅ Guardada", f"Matriz '{nombre}' guardada en {ruta}", parent=self.root)
@@ -397,10 +415,10 @@ class MatrixCalculatorGUI:
     def cargar_matriz(self):
         ruta=filedialog.askopenfilename(filetypes=[("Text files","*.txt")])
         if not ruta: return
-        with open(ruta,"r") as f:
+        with open(ruta,"r", encoding="utf-8") as f:
             lineas=f.readlines()
         matriz=[list(map(float,l.strip().split(","))) for l in lineas]
-        nombre=simpledialog.askstring("Nombre","Nombre matriz cargada", parent=self.root)
+        nombre=self.pedir_nombre_matriz("Nombre matriz cargada")
         if not nombre: return
         self.matrices[nombre]=matriz
         self.historial.append(f"Matriz '{nombre}' cargada desde archivo")
@@ -421,9 +439,9 @@ class MatrixCalculatorGUI:
         if not self.historial:
             messagebox.showwarning("⚠️ Atención","No hay historial", parent=self.root)
             return
-        ruta=filedialog.asksaveasfilename(defaultextension=".txt")
+        ruta=filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files","*.txt")])
         if not ruta: return
-        with open(ruta,"w") as f:
+        with open(ruta,"w", encoding="utf-8") as f:
             for h in self.historial:
                 f.write(h+"\n")
         messagebox.showinfo("✅ Exportado", f"Historial exportado a {ruta}", parent=self.root)
